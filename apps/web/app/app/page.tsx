@@ -1,142 +1,306 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-
 import MetricsCards from "@/components/dashboard/MetricsCards";
 import ReteachByGradeBars from "@/components/dashboard/ReteachByGradeBars";
 import ScheduleBuilder from "@/components/dashboard/ScheduleBuilder";
 import TodayTimeline from "@/components/dashboard/TodayTimeline";
 import WeeklyLoadHeatmap from "@/components/dashboard/WeeklyLoadHeatmap";
-import { listLessonPlans } from "@/lib/lessonPlans";
-import {
-  deleteScheduleItem,
-  listAllSchedule,
-  listScheduleByDate,
-  ScheduleItem,
-  ScheduleStatus,
-  updateScheduleItem
-} from "@/lib/schedule";
+import { useDashboardState } from "@/hooks/useDashboardState";
 
-function toDisplayTime(hhmm: string) {
-  const [hRaw, mRaw] = hhmm.split(":");
-  const h = Number(hRaw);
-  const m = Number(mRaw);
-  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
-  const suffix = h >= 12 ? "PM" : "AM";
-  const hour12 = h % 12 === 0 ? 12 : h % 12;
-  const mm = `${m}`.padStart(2, "0");
+function toDisplayTime(hhmm: string): string {
+  const [hoursRaw, minutesRaw] = hhmm.split(":");
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return hhmm;
+
+  const suffix = hours >= 12 ? "PM" : "AM";
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+  const mm = `${minutes}`.padStart(2, "0");
   return `${hour12}:${mm} ${suffix}`;
 }
 
-function nowMinutes() {
-  const d = new Date();
-  return d.getHours() * 60 + d.getMinutes();
-}
-
-function itemStartMinutes(it: ScheduleItem) {
-  const [hRaw, mRaw] = it.startTime.split(":");
-  const h = Number(hRaw);
-  const m = Number(mRaw);
-  return (Number.isNaN(h) ? 0 : h) * 60 + (Number.isNaN(m) ? 0 : m);
-}
-
 export default function DashboardPage() {
-  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [items, setItems] = useState<ScheduleItem[]>([]);
-  const [allItems, setAllItems] = useState<ScheduleItem[]>([]);
-  const [lessonPlans, setLessonPlans] = useState<any[]>([]);
-  const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
-
-  function refresh(day: string) {
-    setItems(listScheduleByDate(day));
-    setAllItems(listAllSchedule());
-  }
-
-  useEffect(() => {
-    refresh(date);
-  }, [date]);
-
-  useEffect(() => {
-    async function loadLessons() {
-      try {
-        const plans = await listLessonPlans();
-        setLessonPlans(Array.isArray(plans) ? plans : []);
-      } catch {
-        setLessonPlans([]);
-      }
-    }
-    loadLessons();
-  }, []);
-
-  const struggledCount = useMemo(() => items.filter((it) => it.status === "struggled").length, [items]);
-  const nextClass = useMemo(() => {
-    const now = nowMinutes();
-    return items.find((it) => itemStartMinutes(it) >= now) ?? null;
-  }, [items]);
-  const isTodaySelected = date === todayIso;
-
-  function setStatus(id: string, status: ScheduleStatus) {
-    updateScheduleItem(id, { status });
-    refresh(date);
-  }
-
-  function setStruggleNotes(id: string, struggleNotes: string) {
-    updateScheduleItem(id, { struggleNotes });
-    refresh(date);
-  }
-
-  function jumpToNextUp() {
-    if (!nextClass) return;
-    const target = document.getElementById(`timeline-item-${nextClass.id}`);
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
-    setHighlightedItemId(nextClass.id);
-    window.setTimeout(() => setHighlightedItemId((current) => (current === nextClass.id ? null : current)), 1800);
-  }
+  const {
+    mode,
+    setMode,
+    date,
+    setDate,
+    goPrevSchoolDay,
+    goNextSchoolDay,
+    isWeekendDate,
+    isTodaySelected,
+    previewItems,
+    lessonPlans,
+    items,
+    allItems,
+    struggledCount,
+    nextClass,
+    highlightedItemId,
+    templateNotice,
+    updateStatus,
+    updateNotes,
+    deleteItem,
+    jumpToNextUp,
+    generateDayFromTemplate,
+    hasTemplateForDate
+  } = useDashboardState();
 
   return (
     <div style={{ display: "grid", gap: 24 }}>
-      <header>
-        <h1 style={{ margin: 0 }}>Teacher Dashboard</h1>
-        <p style={{ margin: "6px 0 0", color: "#4B5563" }}>
-          Daily command center for classes, lesson flow, and reteach signals.
-        </p>
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ margin: 0 }}>Teacher Dashboard</h1>
+          <p style={{ margin: "6px 0 0", color: "#4B5563" }}>
+            Daily command center for classes, lesson flow, and reteach signals.
+          </p>
+        </div>
+        <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
+          <div
+            role="tablist"
+            aria-label="Dashboard mode"
+            style={{
+              display: "inline-flex",
+              gap: 6,
+              border: "1px solid #E5E7EB",
+              borderRadius: 999,
+              padding: 4,
+              background: "#fff"
+            }}
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "today"}
+              onClick={() => setMode("today")}
+              style={{
+                border: 0,
+                borderRadius: 999,
+                padding: "7px 12px",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                background: mode === "today" ? "#F3F4F6" : "transparent",
+                color: mode === "today" ? "#111827" : "#64748B"
+              }}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "template"}
+              onClick={() => setMode("template")}
+              style={{
+                border: 0,
+                borderRadius: 999,
+                padding: "7px 12px",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                background: mode === "template" ? "#F3F4F6" : "transparent",
+                color: mode === "template" ? "#111827" : "#64748B"
+              }}
+            >
+              Template
+            </button>
+          </div>
+          {mode === "today" ? (
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                border: "1px solid #E5E7EB",
+                borderRadius: 10,
+                padding: 4,
+                background: "#fff"
+              }}
+            >
+              <button
+                type="button"
+                aria-label="Previous school day"
+                onClick={goPrevSchoolDay}
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  color: "#475569",
+                  borderRadius: 6,
+                  width: 28,
+                  height: 28,
+                  cursor: "pointer",
+                  fontSize: 16
+                }}
+              >
+                ‹
+              </button>
+              <input
+                type="date"
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+                style={{
+                  border: "1px solid #D1D5DB",
+                  borderRadius: 8,
+                  padding: "6px 8px",
+                  fontSize: 12,
+                  color: "#1F2937"
+                }}
+              />
+              <button
+                type="button"
+                aria-label="Next school day"
+                onClick={goNextSchoolDay}
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  color: "#475569",
+                  borderRadius: 6,
+                  width: 28,
+                  height: 28,
+                  cursor: "pointer",
+                  fontSize: 16
+                }}
+              >
+                ›
+              </button>
+            </div>
+          ) : null}
+        </div>
       </header>
 
-      <MetricsCards
-        classesToday={items.length}
-        needReteach={struggledCount}
-        nextUpLabel={
-          nextClass ? (nextClass.grade?.trim() ? `${nextClass.grade}-${nextClass.classLabel}` : nextClass.classLabel) : "No remaining classes"
-        }
-        nextUpTime={nextClass ? `${toDisplayTime(nextClass.startTime)} to ${toDisplayTime(nextClass.endTime)}` : undefined}
-        onNextUpClick={nextClass ? jumpToNextUp : undefined}
-      />
+      {mode === "today" && templateNotice ? (
+        <p style={{ margin: "-10px 0 0", fontSize: 12, color: "#64748B" }}>{templateNotice}</p>
+      ) : null}
 
-      <ScheduleBuilder
-        date={date}
-        onDateChange={setDate}
-        lessonPlans={lessonPlans}
-        onPublished={() => refresh(date)}
-      />
+      {mode === "today" ? (
+        <>
+          <MetricsCards
+            classesToday={items.length}
+            needReteach={struggledCount}
+            nextUpLabel={
+              nextClass ? (nextClass.grade?.trim() ? `${nextClass.grade}-${nextClass.classLabel}` : nextClass.classLabel) : "No remaining classes"
+            }
+            nextUpTime={nextClass ? `${toDisplayTime(nextClass.startTime)} to ${toDisplayTime(nextClass.endTime)}` : undefined}
+            onNextUpClick={nextClass ? jumpToNextUp : undefined}
+          />
 
-      <section style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
-        <TodayTimeline
-          items={items}
-          isTodaySelected={isTodaySelected}
-          highlightedItemId={highlightedItemId}
-          onStatusChange={setStatus}
-          onDelete={(id) => {
-            deleteScheduleItem(id);
-            refresh(date);
-          }}
-          onStruggleNotesChange={setStruggleNotes}
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
+            {previewItems.map((preview) => (
+              <button
+                key={preview.date}
+                type="button"
+                onClick={() => setDate(preview.date)}
+                style={{
+                  border: "1px solid #E5E7EB",
+                  borderRadius: 999,
+                  padding: "7px 10px",
+                  background: preview.date === date ? "#F8FAFC" : "#fff",
+                  color: preview.date === date ? "#111827" : "#475569",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {preview.label} · {preview.count > 0 ? preview.count : preview.hasTemplate ? "—" : 0}
+              </button>
+            ))}
+          </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setMode("template")}
+              style={{
+                border: "1px solid #D1D5DB",
+                borderRadius: 8,
+                background: "#fff",
+                color: "#111827",
+                fontSize: 13,
+                fontWeight: 600,
+                padding: "8px 12px",
+                cursor: "pointer"
+              }}
+            >
+              Edit weekly template
+            </button>
+          </div>
+
+          {isWeekendDate ? (
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "8px 10px",
+                border: "1px solid #E5E7EB",
+                borderRadius: 10,
+                background: "#fff",
+                fontSize: 12,
+                color: "#64748B",
+                flexWrap: "wrap"
+              }}
+            >
+              <span>Weekend — no scheduled classes.</span>
+              <button
+                type="button"
+                onClick={goNextSchoolDay}
+                style={{
+                  border: "1px solid #D1D5DB",
+                  borderRadius: 8,
+                  background: "#fff",
+                  color: "#334155",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  padding: "6px 9px",
+                  cursor: "pointer"
+                }}
+              >
+                Go to next school day
+              </button>
+              <button
+                type="button"
+                onClick={goPrevSchoolDay}
+                style={{
+                  border: "1px solid #D1D5DB",
+                  borderRadius: 8,
+                  background: "#fff",
+                  color: "#334155",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  padding: "6px 9px",
+                  cursor: "pointer"
+                }}
+              >
+                Go to last school day
+              </button>
+            </div>
+          ) : null}
+
+          <section style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
+            <TodayTimeline
+              items={items}
+              isTodaySelected={isTodaySelected}
+              highlightedItemId={highlightedItemId}
+              onStatusChange={updateStatus}
+              onGenerateToday={() => {
+                generateDayFromTemplate(date, "fill-empty-only");
+              }}
+              onDelete={deleteItem}
+              onStruggleNotesChange={updateNotes}
+            />
+            <div style={{ display: "grid", gap: 12 }}>
+              <ReteachByGradeBars items={items} />
+              <WeeklyLoadHeatmap selectedDate={date} allItems={allItems} />
+            </div>
+          </section>
+        </>
+      ) : (
+        <ScheduleBuilder
+          lessonPlans={lessonPlans}
+          hasTemplateForDate={hasTemplateForDate}
+          onGenerateForDate={generateDayFromTemplate}
         />
-        <div style={{ display: "grid", gap: 12 }}>
-          <ReteachByGradeBars items={items} />
-          <WeeklyLoadHeatmap selectedDate={date} allItems={allItems} />
-        </div>
-      </section>
+      )}
     </div>
   );
 }

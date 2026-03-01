@@ -2,219 +2,40 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { createScheduleItem, deleteScheduleItem, listScheduleByDate } from "@/lib/schedule";
+import {
+  DayKey,
+  DAYS,
+  defaultWeeklyTemplate,
+  enumerateDateRange,
+  hasTemplateForDate as hasWeeklyTemplateForDate,
+  loadWeeklyTemplate,
+  parseTemplateDate,
+  PERIODS,
+  PublishMode,
+  saveWeeklyTemplate,
+  toIsoDate,
+  TYPE_OPTIONS,
+  WeeklyTemplate
+} from "@/lib/weeklyTemplate";
 
 type LessonPlan = {
   id: string;
   title: string;
 };
 
+type GenerateForDate = (dateIso: string, mode: PublishMode, template: WeeklyTemplate) => { created: number; skipped: number };
+
 type ScheduleBuilderProps = {
-  date: string;
-  onDateChange: (isoDate: string) => void;
   lessonPlans: LessonPlan[];
+  onGenerateForDate: GenerateForDate;
+  hasTemplateForDate?: (dateIso: string, template?: WeeklyTemplate) => boolean;
   onPublished?: () => void;
 };
-
-type DayKey = "mon" | "tue" | "wed" | "thu" | "fri";
-type CellType = "instruction" | "practice" | "assessment" | "review" | "planning" | "lunch";
-
-type TemplateCell = {
-  label: string;
-  type: CellType;
-  lessonPlanId: string;
-  notes: string;
-  locked: boolean;
-};
-
-type WeeklyTemplate = Record<DayKey, Record<number, TemplateCell>>;
 
 type CellRef = {
   day: DayKey;
   periodId: number;
 };
-
-const TEMPLATE_STORAGE_KEY = "lv_weekly_template_v2";
-
-const DAYS: { key: DayKey; label: string; weekday: number }[] = [
-  { key: "mon", label: "Mon", weekday: 1 },
-  { key: "tue", label: "Tue", weekday: 2 },
-  { key: "wed", label: "Wed", weekday: 3 },
-  { key: "thu", label: "Thu", weekday: 4 },
-  { key: "fri", label: "Fri", weekday: 5 }
-];
-
-const PERIODS = [
-  { id: 1, label: "1", start: "07:50", end: "08:45", publishable: true },
-  { id: 2, label: "2", start: "09:00", end: "09:50", publishable: true },
-  { id: 3, label: "3", start: "10:15", end: "11:05", publishable: true },
-  { id: 0, label: "-", start: "11:06", end: "11:45", publishable: true },
-  { id: 4, label: "4", start: "11:50", end: "12:40", publishable: true },
-  { id: 5, label: "5", start: "13:00", end: "13:50", publishable: true },
-  { id: 6, label: "6", start: "14:00", end: "14:50", publishable: true }
-] as const;
-
-const TYPE_OPTIONS: { value: CellType; label: string }[] = [
-  { value: "instruction", label: "Instruction" },
-  { value: "practice", label: "Practice" },
-  { value: "assessment", label: "Assessment" },
-  { value: "review", label: "Review" }
-];
-
-const TYPE_LABEL: Record<CellType, string> = {
-  instruction: "Instruction",
-  practice: "Practice",
-  assessment: "Assessment",
-  review: "Review",
-  planning: "Planning",
-  lunch: "Lunch"
-};
-
-const SEEDED_TEMPLATE: Record<DayKey, Record<number, { label: string; type?: CellType; locked?: boolean }>> = {
-  mon: {
-    1: { label: "Fortner" },
-    2: { label: "Jazmine Smith" },
-    3: { label: "Clark" },
-    0: { label: "Lunch", type: "lunch", locked: true },
-    4: { label: "Danis/McClain" },
-    5: { label: "Edwards" },
-    6: { label: "Alycia Smith" }
-  },
-  tue: {
-    1: { label: "Helms" },
-    2: { label: "Worsely" },
-    3: { label: "Kennedy" },
-    0: { label: "Meeting/ Lunch", type: "lunch", locked: true },
-    4: { label: "Mello" },
-    5: { label: "Bridgers" },
-    6: { label: "N. Coles" }
-  },
-  wed: {
-    1: { label: "Wingenroth" },
-    2: { label: "Cosetti" },
-    3: { label: "Ham" },
-    0: { label: "Lunch", type: "lunch", locked: true },
-    4: { label: "Planning", type: "planning", locked: true },
-    5: { label: "Planning", type: "planning", locked: true },
-    6: { label: "Lewis" }
-  },
-  thu: {
-    1: { label: "McCormick" },
-    2: { label: "Beckett" },
-    3: { label: "Pollard" },
-    0: { label: "Lunch", type: "lunch", locked: true },
-    4: { label: "Jones" },
-    5: { label: "Dohar" },
-    6: { label: "Davis" }
-  },
-  fri: {
-    1: { label: "Wingenroth" },
-    2: { label: "Cosetti" },
-    3: { label: "Ham" },
-    0: { label: "Lunch", type: "lunch", locked: true },
-    4: { label: "Jones" },
-    5: { label: "Edwards" },
-    6: { label: "Davis" }
-  }
-};
-
-function makeDefaultCell(day: DayKey, periodId: number): TemplateCell {
-  const seeded = SEEDED_TEMPLATE[day]?.[periodId];
-  const inferredType: CellType =
-    seeded?.type ??
-    (periodId === 0 ? "lunch" : seeded?.label?.toLowerCase().includes("planning") ? "planning" : "instruction");
-  const locked = seeded?.locked ?? (periodId === 0 || inferredType === "planning");
-  return {
-    label: seeded?.label ?? "",
-    type: inferredType,
-    lessonPlanId: "",
-    notes: "",
-    locked
-  };
-}
-
-function defaultTemplate(): WeeklyTemplate {
-  const result = {} as WeeklyTemplate;
-  for (const day of DAYS) {
-    const row = {} as Record<number, TemplateCell>;
-    for (const period of PERIODS) {
-      row[period.id] = makeDefaultCell(day.key, period.id);
-    }
-    result[day.key] = row;
-  }
-  return result;
-}
-
-function safeParseTemplate(raw: string | null): WeeklyTemplate | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return null;
-    const next = defaultTemplate();
-    for (const day of DAYS) {
-      const dayValue = (parsed as Record<string, unknown>)[day.key];
-      if (!dayValue || typeof dayValue !== "object") continue;
-      for (const period of PERIODS) {
-        const incoming = (dayValue as Record<string, unknown>)[String(period.id)];
-        if (!incoming || typeof incoming !== "object") continue;
-        const source = incoming as Record<string, unknown>;
-        next[day.key][period.id] = {
-          label: typeof source.label === "string" ? source.label : next[day.key][period.id].label,
-          type: typeof source.type === "string" ? (source.type as CellType) : next[day.key][period.id].type,
-          lessonPlanId: typeof source.lessonPlanId === "string" ? source.lessonPlanId : "",
-          notes: typeof source.notes === "string" ? source.notes : "",
-          locked: Boolean(source.locked)
-        };
-      }
-    }
-    return next;
-  } catch {
-    return null;
-  }
-}
-
-function loadTemplate(): WeeklyTemplate {
-  if (typeof window === "undefined") return defaultTemplate();
-  return safeParseTemplate(window.localStorage.getItem(TEMPLATE_STORAGE_KEY)) ?? defaultTemplate();
-}
-
-function saveTemplate(template: WeeklyTemplate) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(template));
-}
-
-function toIsoDate(year: number, month1: number, day: number) {
-  return `${year}-${`${month1}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}`;
-}
-
-function parseDate(iso: string) {
-  const date = new Date(`${iso}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? new Date() : date;
-}
-
-function enumerateDateRange(startIso: string, endIso: string) {
-  const start = parseDate(startIso);
-  const end = parseDate(endIso);
-  const out: string[] = [];
-  const cursor = start <= end ? start : end;
-  const stop = start <= end ? end : start;
-
-  while (cursor <= stop) {
-    out.push(toIsoDate(cursor.getFullYear(), cursor.getMonth() + 1, cursor.getDate()));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return out;
-}
-
-function weekdayToDayKey(weekday: number): DayKey | null {
-  return DAYS.find((d) => d.weekday === weekday)?.key ?? null;
-}
-
-function extractGrade(label: string) {
-  const match = label.trim().match(/^(K|[1-5])\b/i);
-  return match ? match[1].toUpperCase() : "";
-}
 
 function toDisplayTime(hhmm: string) {
   const [hRaw, mRaw] = hhmm.split(":");
@@ -227,22 +48,22 @@ function toDisplayTime(hhmm: string) {
 }
 
 export default function ScheduleBuilder(props: ScheduleBuilderProps) {
-  const { date, onDateChange, lessonPlans, onPublished } = props;
+  const { lessonPlans, onGenerateForDate, onPublished, hasTemplateForDate = hasWeeklyTemplateForDate } = props;
 
-  const [template, setTemplate] = useState<WeeklyTemplate>(() => defaultTemplate());
+  const [template, setTemplate] = useState<WeeklyTemplate>(() => defaultWeeklyTemplate());
   const [selectedCell, setSelectedCell] = useState<CellRef | null>(null);
   const [publishOpen, setPublishOpen] = useState(false);
   const [startDay, setStartDay] = useState(1);
   const [endDay, setEndDay] = useState(31);
-  const [publishMode, setPublishMode] = useState<"fill-empty-only" | "overwrite">("fill-empty-only");
+  const [publishMode, setPublishMode] = useState<PublishMode>("fill-empty-only");
   const [publishFeedback, setPublishFeedback] = useState<string | null>(null);
 
   useEffect(() => {
-    setTemplate(loadTemplate());
+    setTemplate(loadWeeklyTemplate());
   }, []);
 
   useEffect(() => {
-    saveTemplate(template);
+    saveWeeklyTemplate(template);
   }, [template]);
 
   const selected = useMemo(() => {
@@ -257,7 +78,7 @@ export default function ScheduleBuilder(props: ScheduleBuilderProps) {
   }, [selectedCell, template]);
   const selectedLocked = Boolean(selected?.cell.locked);
 
-  function updateCell(day: DayKey, periodId: number, patch: Partial<TemplateCell>) {
+  function updateCell(day: DayKey, periodId: number, patch: Partial<WeeklyTemplate[DayKey][number]>) {
     setTemplate((current) => ({
       ...current,
       [day]: {
@@ -275,7 +96,7 @@ export default function ScheduleBuilder(props: ScheduleBuilderProps) {
     const to = toIsoDate(2026, 3, endDay);
     const allDates = enumerateDateRange(from, to);
     const weekdays = allDates.filter((iso) => {
-      const weekday = parseDate(iso).getDay();
+      const weekday = parseTemplateDate(iso).getDay();
       return weekday >= 1 && weekday <= 5;
     });
 
@@ -289,46 +110,10 @@ export default function ScheduleBuilder(props: ScheduleBuilderProps) {
     let skipped = 0;
 
     for (const iso of weekdays) {
-      const weekday = parseDate(iso).getDay();
-      const dayKey = weekdayToDayKey(weekday);
-      if (!dayKey) continue;
-
-      if (publishMode === "overwrite") {
-        for (const existing of listScheduleByDate(iso)) {
-          deleteScheduleItem(existing.id);
-        }
-      }
-
-      const existingForDay = listScheduleByDate(iso);
-
-      for (const period of PERIODS) {
-        if (!period.publishable) continue;
-        const cell = template[dayKey][period.id];
-        const isLockedAutoBlock = cell.locked && (cell.type === "planning" || cell.type === "lunch");
-        if (!isLockedAutoBlock && !cell.label.trim()) continue;
-
-        const slotTaken = existingForDay.some((item) => item.startTime === period.start && item.endTime === period.end);
-        if (publishMode === "fill-empty-only" && slotTaken) {
-          skipped += 1;
-          continue;
-        }
-
-        const typeLabel = TYPE_LABEL[cell.type];
-        const notes = cell.notes.trim();
-        const classLabel = isLockedAutoBlock ? (cell.label.trim() || typeLabel) : cell.label.trim();
-        const topic = isLockedAutoBlock ? typeLabel : notes ? `${typeLabel} · ${notes}` : typeLabel;
-
-        createScheduleItem({
-          date: iso,
-          classLabel,
-          grade: isLockedAutoBlock ? "" : extractGrade(cell.label),
-          topic,
-          startTime: period.start,
-          endTime: period.end,
-          lessonPlanId: isLockedAutoBlock ? undefined : cell.lessonPlanId || undefined
-        });
-        created += 1;
-      }
+      if (!hasTemplateForDate(iso, template)) continue;
+      const result = onGenerateForDate(iso, publishMode, template);
+      created += result.created;
+      skipped += result.skipped;
     }
 
     onPublished?.();
@@ -341,15 +126,9 @@ export default function ScheduleBuilder(props: ScheduleBuilderProps) {
       <div className="headRow">
         <div>
           <h2 className="title">Schedule Builder</h2>
-          <p className="subtitle">Tap a grid cell to edit a class block template.</p>
         </div>
 
         <div className="headActions">
-          <label className="dateLabel">
-            Date
-            <input type="date" value={date} onChange={(e) => onDateChange(e.target.value)} />
-          </label>
-
           <div className="publishWrap">
             <button type="button" className="publishBtn" onClick={() => setPublishOpen((open) => !open)}>
               Publish
@@ -417,7 +196,7 @@ export default function ScheduleBuilder(props: ScheduleBuilderProps) {
 
       {publishFeedback ? <p className="feedback">{publishFeedback}</p> : null}
 
-      <div className="builderBody">
+      <div className={`builderBody ${selected ? "withPanel" : ""}`}>
         <div className="gridSurface" role="grid" aria-label="Weekly schedule template">
           <div className="cell headerCell" />
           {DAYS.map((day) => (
@@ -459,10 +238,8 @@ export default function ScheduleBuilder(props: ScheduleBuilderProps) {
           ))}
         </div>
 
-        <aside className="sidePanel" aria-live="polite">
-          {!selected ? (
-            <div className="placeholder">Select a class cell to edit label and type.</div>
-          ) : (
+        {selected ? (
+          <aside className="sidePanel" aria-live="polite">
             <div className="panelCard">
               <div className="panelHead">
                 <h3>{selected.day.toUpperCase()} · {selected.period.label}</h3>
@@ -528,8 +305,8 @@ export default function ScheduleBuilder(props: ScheduleBuilderProps) {
                 />
               </details>
             </div>
-          )}
-        </aside>
+          </aside>
+        ) : null}
       </div>
 
       <style jsx>{`
@@ -557,31 +334,11 @@ export default function ScheduleBuilder(props: ScheduleBuilderProps) {
           color: #111827;
         }
 
-        .subtitle {
-          margin: 4px 0 0;
-          color: #6b7280;
-          font-size: 13px;
-        }
-
         .headActions {
           display: flex;
           align-items: center;
           gap: 10px;
           flex-wrap: wrap;
-        }
-
-        .dateLabel {
-          display: grid;
-          gap: 4px;
-          font-size: 12px;
-          color: #6b7280;
-        }
-
-        .dateLabel input {
-          border: 1px solid #d1d5db;
-          border-radius: 8px;
-          padding: 8px;
-          font: inherit;
         }
 
         .publishWrap {
@@ -678,8 +435,12 @@ export default function ScheduleBuilder(props: ScheduleBuilderProps) {
 
         .builderBody {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+          grid-template-columns: minmax(0, 1fr);
           gap: 12px;
+        }
+
+        .builderBody.withPanel {
+          grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
         }
 
         .gridSurface {
@@ -785,19 +546,6 @@ export default function ScheduleBuilder(props: ScheduleBuilderProps) {
           min-height: 420px;
           padding: 12px;
           box-sizing: border-box;
-        }
-
-        .placeholder {
-          font-size: 13px;
-          color: #64748b;
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-          padding: 16px;
-          border: 1px dashed #cbd5e1;
-          border-radius: 8px;
         }
 
         .panelCard {

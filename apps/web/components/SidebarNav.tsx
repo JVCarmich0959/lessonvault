@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { logout } from "@/lib/auth";
 
 type SectionKey = "instruction" | "account";
 type IconName =
   | "dashboard"
+  | "classes"
   | "library"
   | "materials"
   | "standards"
@@ -25,6 +26,7 @@ type SidebarNavProps = {
 
 function isActive(pathname: string, href: string) {
   if (href === "/app") return pathname === "/app";
+  if (href === "/app/classes") return pathname === "/app/classes" || pathname.startsWith("/app/classes/");
   if (href === "/app/library") {
     return pathname === "/app/library" || pathname.startsWith("/app/lesson/") || pathname.startsWith("/app/run/");
   }
@@ -50,6 +52,17 @@ function Icon({ name }: { name: IconName }) {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
         <path d="M4 19.5V5.5c0-1.1.9-2 2-2h12v16H6c-1.1 0-2 .9-2 2z" />
         <path d="M18 19.5V3.5" />
+      </svg>
+    );
+  }
+
+  if (name === "classes") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+        <path d="M4 19h16" />
+        <path d="M6 19v-7h12v7" />
+        <path d="M9 12V8h6v4" />
+        <path d="M12 5v3" />
       </svg>
     );
   }
@@ -121,6 +134,7 @@ function Icon({ name }: { name: IconName }) {
 
 const instructionLinks = [
   { href: "/app", label: "Dashboard", icon: "dashboard" as const },
+  { href: "/app/classes", label: "Classes", icon: "classes" as const },
   { href: "/app/library", label: "Library", icon: "library" as const },
   { href: "/app/materials", label: "Materials", icon: "materials" as const },
   { href: "/app/standards", label: "Standards", icon: "standards" as const }
@@ -129,10 +143,17 @@ const instructionLinks = [
 export default function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [openSection, setOpenSection] = useState<SectionKey>("instruction");
+  const [openSection, setOpenSection] = useState<SectionKey | null>(null);
+
+  useEffect(() => {
+    if (collapsed) {
+      setOpenSection(null);
+    }
+  }, [collapsed]);
 
   function toggle(section: SectionKey) {
-    setOpenSection((current) => (current === section ? current : section));
+    if (collapsed) return;
+    setOpenSection((current) => (current === section ? null : section));
   }
 
   return (
@@ -144,7 +165,7 @@ export default function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavP
           </span>
           <span className="brandText">LessonVault</span>
         </div>
-        <div className="collapseWrap">
+        <div className="collapseWrap" data-tooltip={collapsed ? "Expand sidebar" : undefined}>
           <button
             type="button"
             className="collapseBtn"
@@ -155,7 +176,6 @@ export default function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavP
               <Icon name="sidebar" />
             </span>
           </button>
-          {collapsed ? <span className="tooltip">Expand sidebar</span> : null}
         </div>
       </div>
 
@@ -169,6 +189,7 @@ export default function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavP
             onClick={() => toggle("instruction")}
             aria-expanded={openSection === "instruction"}
             aria-controls="instruction-panel"
+            data-tooltip={collapsed ? "Instruction" : undefined}
           >
             <span className="sectionHeaderInner">
               <span className="iconWrap" aria-hidden>
@@ -179,7 +200,6 @@ export default function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavP
             <span className={`chevron ${openSection === "instruction" ? "open" : ""}`} aria-hidden>
               <Icon name="chevron" />
             </span>
-            {collapsed ? <span className="tooltip">Instruction</span> : null}
           </button>
 
           <div id="instruction-panel" className={`panel ${openSection === "instruction" ? "open" : ""}`}>
@@ -190,12 +210,12 @@ export default function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavP
                   href={item.href}
                   className={`link ${isActive(pathname, item.href) ? "active" : ""}`}
                   aria-label={collapsed ? item.label : undefined}
+                  data-tooltip={collapsed ? item.label : undefined}
                 >
                   <span className="iconWrap" aria-hidden>
                     <Icon name={item.icon} />
                   </span>
                   <span className="linkLabel">{item.label}</span>
-                  {collapsed ? <span className="tooltip">{item.label}</span> : null}
                 </Link>
               ))}
             </nav>
@@ -209,6 +229,7 @@ export default function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavP
             onClick={() => toggle("account")}
             aria-expanded={openSection === "account"}
             aria-controls="account-panel"
+            data-tooltip={collapsed ? "Account" : undefined}
           >
             <span className="sectionHeaderInner">
               <span className="iconWrap" aria-hidden>
@@ -219,7 +240,6 @@ export default function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavP
             <span className={`chevron ${openSection === "account" ? "open" : ""}`} aria-hidden>
               <Icon name="chevron" />
             </span>
-            {collapsed ? <span className="tooltip">Account</span> : null}
           </button>
 
           <div id="account-panel" className={`panel ${openSection === "account" ? "open" : ""}`}>
@@ -232,12 +252,12 @@ export default function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavP
                   router.replace("/login");
                 }}
                 aria-label={collapsed ? "Logout" : undefined}
+                data-tooltip={collapsed ? "Logout" : undefined}
               >
                 <span className="iconWrap" aria-hidden>
                   <Icon name="logout" />
                 </span>
                 <span className="linkLabel">Logout</span>
-                {collapsed ? <span className="tooltip">Logout</span> : null}
               </button>
             </div>
           </div>
@@ -457,6 +477,10 @@ export default function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavP
           background: #f8fafc;
         }
 
+        .link:visited {
+          color: #4b5563;
+        }
+
         .link:focus-visible {
           outline: 2px solid #93c5fd;
           outline-offset: 1px;
@@ -476,11 +500,16 @@ export default function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavP
           font-family: inherit;
         }
 
-        .tooltip {
+        [data-tooltip] {
+          position: relative;
+        }
+
+        [data-tooltip]::after {
           position: absolute;
           left: calc(100% + 8px);
           top: 50%;
           transform: translateY(-50%);
+          content: attr(data-tooltip);
           padding: 4px 8px;
           border-radius: 6px;
           background: #111827;
@@ -520,14 +549,9 @@ export default function SidebarNav({ collapsed, onToggleCollapsed }: SidebarNavP
           border-left-width: 2px;
         }
 
-        .collapsed .sectionHeader:hover .tooltip,
-        .collapsed .sectionHeader:focus-visible .tooltip,
-        .collapsed .link:hover .tooltip,
-        .collapsed .link:focus-visible .tooltip,
-        .collapsed .linkButton:hover .tooltip,
-        .collapsed .linkButton:focus-visible .tooltip,
-        .collapsed .collapseWrap:hover .tooltip,
-        .collapsed .collapseBtn:focus-visible + .tooltip {
+        .collapsed [data-tooltip]:hover::after,
+        .collapsed [data-tooltip]:focus-visible::after,
+        .collapsed .collapseWrap:focus-within::after {
           opacity: 1;
         }
       `}</style>

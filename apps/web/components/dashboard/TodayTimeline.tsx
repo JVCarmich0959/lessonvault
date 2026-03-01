@@ -8,6 +8,7 @@ type TodayTimelineProps = {
   isTodaySelected: boolean;
   highlightedItemId?: string | null;
   onStatusChange: (id: string, status: ScheduleStatus) => void;
+  onGenerateToday?: () => void;
   onDelete: (id: string) => void;
   onStruggleNotesChange: (id: string, notes: string) => void;
 };
@@ -57,7 +58,7 @@ function isNowWithin(item: ScheduleItem) {
 }
 
 export default function TodayTimeline(props: TodayTimelineProps) {
-  const { items, isTodaySelected, highlightedItemId, onStatusChange, onDelete, onStruggleNotesChange } = props;
+  const { items, isTodaySelected, highlightedItemId, onStatusChange, onGenerateToday, onDelete, onStruggleNotesChange } = props;
 
   return (
     <section className="shell">
@@ -66,12 +67,14 @@ export default function TodayTimeline(props: TodayTimelineProps) {
 
       {items.length === 0 ? (
         <div className="emptyState" role="status" aria-live="polite">
-          <span className="emptyIcon" aria-hidden>
-            +
-          </span>
           <div>
-            <div className="emptyTitle">No classes yet for this date.</div>
-            <div className="emptyHint">Add a class block above to build today&apos;s sequence.</div>
+            <div className="emptyTitle">No classes scheduled for this date.</div>
+            <div className="emptyHint">Use Template to edit your weekly schedule, or generate from template if available.</div>
+            {onGenerateToday ? (
+              <button type="button" className="emptyAction" onClick={onGenerateToday}>
+                Generate this day
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -195,20 +198,6 @@ export default function TodayTimeline(props: TodayTimelineProps) {
           gap: 10px;
         }
 
-        .emptyIcon {
-          width: 20px;
-          height: 20px;
-          border-radius: 999px;
-          border: 1px solid #cbd5e1;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          color: #64748b;
-          flex-shrink: 0;
-          font-size: 13px;
-          font-weight: 700;
-        }
-
         .emptyTitle {
           font-size: 13px;
           font-weight: 600;
@@ -219,6 +208,22 @@ export default function TodayTimeline(props: TodayTimelineProps) {
           margin-top: 2px;
           font-size: 12px;
           color: #64748b;
+        }
+
+        .emptyAction {
+          margin-top: 10px;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          background: #fff;
+          color: #111827;
+          font-size: 12px;
+          font-weight: 600;
+          padding: 7px 10px;
+          cursor: pointer;
+        }
+
+        .emptyAction:hover {
+          background: #f8fafc;
         }
 
         .list {
@@ -268,6 +273,11 @@ export default function TodayTimeline(props: TodayTimelineProps) {
           border-radius: 10px;
           padding: 12px;
           background: #fff;
+          transition: background 140ms ease;
+        }
+
+        .itemCard:hover {
+          background: #f8fafc;
         }
 
         .highlighted .itemCard {
@@ -308,6 +318,10 @@ export default function TodayTimeline(props: TodayTimelineProps) {
           color: #2563eb;
           font-size: 12px;
           text-decoration: none;
+        }
+
+        .linkedLesson:visited {
+          color: #2563eb;
         }
 
         .linkedLesson:hover {

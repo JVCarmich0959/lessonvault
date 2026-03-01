@@ -11,6 +11,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body style={{ margin: 0, fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
         {children}
+        <style>{`a:visited { color: inherit; }`}</style>
       </body>
     </html>
   );

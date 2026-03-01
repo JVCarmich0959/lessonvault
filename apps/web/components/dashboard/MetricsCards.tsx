@@ -26,19 +26,20 @@ export default function MetricsCards(props: MetricsCardsProps) {
   return (
     <section
       aria-label="Dashboard metrics"
+      className="metricsGrid"
       style={{
         display: "grid",
         gap: 12,
         gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))"
       }}
     >
-      <article style={{ border: "1px solid #E5E7EB", borderRadius: 12, padding: 16, minHeight: 134, display: "grid", alignContent: "space-between" }}>
+      <article className="metricCard" style={{ border: "1px solid #E5E7EB", borderRadius: 12, padding: 16, minHeight: 134, display: "grid", alignContent: "space-between" }}>
         <div style={{ color: "#6B7280", fontSize: 12, letterSpacing: 0.2, fontWeight: 600 }}>Classes Today</div>
         <div style={{ fontSize: 36, fontWeight: 700, lineHeight: 1.05, color: "#111827" }}>{classesToday}</div>
         <div style={{ marginTop: 2, fontSize: 12, color: "#6B7280" }}>{trends.classesToday}</div>
       </article>
 
-      <article style={{ border: `1px solid ${tone.border}`, borderRadius: 12, padding: 16, minHeight: 134, display: "grid", alignContent: "space-between" }}>
+      <article className="metricCard" style={{ border: `1px solid ${tone.border}`, borderRadius: 12, padding: 16, minHeight: 134, display: "grid", alignContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span
             aria-hidden
@@ -53,6 +54,7 @@ export default function MetricsCards(props: MetricsCardsProps) {
       </article>
 
       <article
+        className="metricCard"
         style={{
           border: "1px solid #E5E7EB",
           borderRadius: 12,
@@ -79,6 +81,16 @@ export default function MetricsCards(props: MetricsCardsProps) {
         {nextUpTime && <div style={{ marginTop: 2, color: "#4B5563", fontSize: 13 }}>{nextUpTime}</div>}
         <div style={{ marginTop: 4, fontSize: 12, color: "#6B7280" }}>{trends.nextUp}</div>
       </article>
+
+      <style jsx>{`
+        .metricCard {
+          transition: background 140ms ease;
+        }
+
+        .metricCard:hover {
+          background: #f8fafc;
+        }
+      `}</style>
     </section>
   );
 }
