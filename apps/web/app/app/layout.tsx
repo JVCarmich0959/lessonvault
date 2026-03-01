@@ -1,21 +1,30 @@
-import Link from "next/link";
+"use client";
+
+import { useState } from "react";
+import RequireAuth from "@/components/RequireAuth";
+import SidebarNav from "@/components/SidebarNav";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", minHeight: "100vh" }}>
-      <aside style={{ padding: 16, borderRight: "1px solid #E5E7EB" }}>
-        <h3 style={{ marginTop: 0 }}>LessonVault</h3>
-        <nav style={{ display: "grid", gap: 8 }}>
-          <Link href="/app/library">Library</Link>
-          <Link href="/app/materials">Materials</Link>
-          <Link href="/app/standards">Standards</Link>
-          <Link href="/login">Login</Link>
-        </nav>
-        <p style={{ marginTop: 16, fontSize: 12, color: "#6B7280" }}>
-          (No route guards yet. This is a scaffold.)
-        </p>
-      </aside>
-      <main style={{ padding: 24 }}>{children}</main>
-    </div>
+    <RequireAuth>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: sidebarCollapsed ? "64px 1fr" : "240px 1fr",
+          minHeight: "100vh",
+          transition: "grid-template-columns 200ms ease"
+        }}
+      >
+        <SidebarNav
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed((current) => !current)}
+        />
+        <main style={{ padding: "28px 24px" }}>
+          <div style={{ width: "100%", maxWidth: 1100, margin: "0 auto" }}>{children}</div>
+        </main>
+      </div>
+    </RequireAuth>
   );
 }

@@ -38,4 +38,5 @@ npm run dev
 ## Notes
 - Auth is JWT access token stored in localStorage (simple dev scaffold).
 - Workspace is auto-created on first authenticated request.
+- Passwords longer than 72 bytes are rejected (bcrypt limitation).
 - If you want production-hardening (refresh tokens, secure cookies, RBAC, rate limiting), do that before real users.

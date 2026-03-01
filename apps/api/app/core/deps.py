@@ -1,4 +1,5 @@
 import uuid
+from typing import Annotated, Callable
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt, JWTError
@@ -32,6 +33,30 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
+
+def get_current_workspace_member(
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> WorkspaceMember:
+    member = db.execute(select(WorkspaceMember).where(WorkspaceMember.user_id == user.id)).scalar_one_or_none()
+    if member:
+        return member
+
+    # Keep existing scaffold behavior: each user gets a default owner workspace.
+    get_or_create_default_workspace(db, user)
+    return db.execute(select(WorkspaceMember).where(WorkspaceMember.user_id == user.id)).scalar_one()
+
+def require_workspace_roles(*allowed_roles: str) -> Callable[[WorkspaceMember], WorkspaceMember]:
+    allowed = set(allowed_roles)
+
+    def _enforce(member: Annotated[WorkspaceMember, Depends(get_current_workspace_member)]) -> WorkspaceMember:
+        if member.role not in allowed:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        return member
+
+    return _enforce
 
 def get_or_create_default_workspace(db: Session, user: User) -> Workspace:
     member = db.execute(select(WorkspaceMember).where(WorkspaceMember.user_id == user.id)).scalar_one_or_none()

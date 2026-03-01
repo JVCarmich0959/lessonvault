@@ -1,14 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiLogin, apiRegister } from "@/lib/auth";
+import { getToken } from "@/lib/storage";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  const nextPath = useMemo(() => {
+    if (typeof window === "undefined") return "/app";
+    const next = new URLSearchParams(window.location.search).get("next");
+    return next && next.startsWith("/") ? next : "/app";
+  }, []);
+
+  useEffect(() => {
+    if (getToken()) router.replace(nextPath);
+  }, [nextPath, router]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -16,10 +28,10 @@ export default function LoginPage() {
     try {
       if (mode === "login") {
         await apiLogin({ email, password });
-        setMsg("Logged in. Go to /app/library");
+        router.replace(nextPath);
       } else {
         await apiRegister({ email, password, name });
-        setMsg("Registered. Go to /app/library");
+        router.replace(nextPath);
       }
     } catch (err: any) {
       setMsg(err?.message ?? "Failed");

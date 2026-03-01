@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { listMaterials } from "@/lib/materials";
+import { listMaterials, createMaterial } from "@/lib/materials";
 import { listLessonMaterials, attachLessonMaterials, detachLessonMaterial } from "@/lib/lessonMaterials";
 
 export default function LessonMaterials({ params }: { params: { id: string } }) {
@@ -11,6 +11,8 @@ export default function LessonMaterials({ params }: { params: { id: string } }) 
   const [materialId, setMaterialId] = useState<string>("");
   const [quantity, setQuantity] = useState("");
   const [prep, setPrep] = useState("");
+  const [newMaterialName, setNewMaterialName] = useState("");
+  const [newMaterialCategory, setNewMaterialCategory] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
@@ -46,12 +48,52 @@ export default function LessonMaterials({ params }: { params: { id: string } }) 
     }
   }
 
+  async function createInlineMaterial() {
+    setError(null);
+    try {
+      const created = await createMaterial({
+        name: newMaterialName.trim(),
+        category: newMaterialCategory.trim() || undefined,
+      });
+      const mats = await listMaterials();
+      setAllMaterials(mats);
+      setMaterialId(created.id);
+      setNewMaterialName("");
+      setNewMaterialCategory("");
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to create material");
+    }
+  }
+
   useEffect(() => { refresh(); }, [lessonId]);
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <h1 style={{ margin: 0 }}>Lesson Materials</h1>
       {error && <p style={{ color: "#B91C1C" }}>{error}</p>}
+
+      <div style={{ border: "1px solid #E5E7EB", borderRadius: 10, padding: 12, display: "grid", gap: 8 }}>
+        <div style={{ fontWeight: 600 }}>Create material</div>
+        <input
+          value={newMaterialName}
+          onChange={(e) => setNewMaterialName(e.target.value)}
+          placeholder="Material name (e.g., Chromebooks)"
+          style={{ padding: 10 }}
+        />
+        <input
+          value={newMaterialCategory}
+          onChange={(e) => setNewMaterialCategory(e.target.value)}
+          placeholder="Category (optional)"
+          style={{ padding: 10 }}
+        />
+        <button
+          onClick={createInlineMaterial}
+          style={{ padding: 10 }}
+          disabled={!newMaterialName.trim()}
+        >
+          Add material
+        </button>
+      </div>
 
       <div style={{ border: "1px solid #E5E7EB", borderRadius: 10, padding: 12, display: "grid", gap: 8 }}>
         <div style={{ fontWeight: 600 }}>Attach material</div>
@@ -61,9 +103,6 @@ export default function LessonMaterials({ params }: { params: { id: string } }) 
         <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Quantity note (e.g., 1 per student)" style={{ padding: 10 }} />
         <input value={prep} onChange={(e) => setPrep(e.target.value)} placeholder="Prep note (optional)" style={{ padding: 10 }} />
         <button onClick={attach} style={{ padding: 10 }}>Attach</button>
-        <div style={{ color: "#6B7280", fontSize: 12 }}>
-          Tip: add materials in the global Materials page first.
-        </div>
       </div>
 
       <div style={{ display: "grid", gap: 8 }}>

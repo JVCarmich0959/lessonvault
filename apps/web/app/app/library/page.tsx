@@ -11,6 +11,11 @@ type Lesson = {
   primary_grade: string;
   subject: string;
   duration_minutes: number;
+  content?: {
+    meta?: {
+      unit?: string;
+    };
+  };
 };
 
 const GRADE_OPTIONS = ["K", "1", "2", "3", "4", "5"] as const;
@@ -36,6 +41,7 @@ export default function LibraryPage() {
   const [subject, setSubject] =
     useState<(typeof SUBJECT_OPTIONS)[number]>("Technology");
   const [duration, setDuration] = useState<number>(45);
+  const [unit, setUnit] = useState("");
 
   const canCreate = useMemo(() => title.trim().length > 0, [title]);
 
@@ -58,12 +64,16 @@ export default function LibraryPage() {
         primary_grade: grade,
         subject,
         duration_minutes: duration,
-        content: { blocks: [] },
+        content: {
+          blocks: [],
+          meta: unit.trim() ? { unit: unit.trim() } : {},
+        },
       });
       setTitle("");
       setGrade("K");
       setSubject("Technology");
       setDuration(45);
+      setUnit("");
       setIsCreating(false);
       await refresh();
     } catch (e: any) {
@@ -146,6 +156,13 @@ export default function LibraryPage() {
                 title="Duration (minutes)"
               />
 
+              <input
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                placeholder="Unit (optional)"
+                style={{ padding: 10, minWidth: 200 }}
+              />
+
               <button
                 onClick={createFromForm}
                 style={{ padding: 10 }}
@@ -183,6 +200,11 @@ export default function LibraryPage() {
               Grade {l.primary_grade || "—"} · {l.subject || "—"} ·{" "}
               {l.duration_minutes} min
             </div>
+            {l.content?.meta?.unit && (
+              <div style={{ color: "#6B7280", fontSize: 13 }}>
+                Unit: {l.content.meta.unit}
+              </div>
+            )}
           </Link>
         ))}
       </div>

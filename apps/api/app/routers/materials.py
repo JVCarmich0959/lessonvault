@@ -2,26 +2,26 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_or_create_default_workspace
+from app.core.deps import CurrentUser, get_current_user, get_or_create_default_workspace, require_workspace_roles
 from app.db.session import get_db
 from app.schemas.materials import MaterialCreate, MaterialOut, AttachMaterialsIn
 from app.services.lesson_service import get_lesson_plan
 from app.services.materials_service import list_materials, create_material, list_attached, attach, detach
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 @router.get("/materials", response_model=list[MaterialOut])
-def get_materials(q: str | None = None, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def get_materials(user: CurrentUser, q: str | None = None, db: Session = Depends(get_db)):
     ws = get_or_create_default_workspace(db, user)
     return list_materials(db, ws.id, q=q)
 
-@router.post("/materials", response_model=MaterialOut)
-def post_material(payload: MaterialCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+@router.post("/materials", response_model=MaterialOut, dependencies=[Depends(require_workspace_roles("owner"))])
+def post_material(payload: MaterialCreate, user: CurrentUser, db: Session = Depends(get_db)):
     ws = get_or_create_default_workspace(db, user)
     return create_material(db, ws.id, payload.name, payload.category)
 
 @router.get("/lesson-plans/{lesson_id}/materials")
-def get_lesson_materials(lesson_id: uuid.UUID, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def get_lesson_materials(lesson_id: uuid.UUID, user: CurrentUser, db: Session = Depends(get_db)):
     ws = get_or_create_default_workspace(db, user)
     lesson = get_lesson_plan(db, lesson_id, ws.id)
     if not lesson:
@@ -38,8 +38,8 @@ def get_lesson_materials(lesson_id: uuid.UUID, db: Session = Depends(get_db), us
         })
     return out
 
-@router.post("/lesson-plans/{lesson_id}/materials")
-def attach_materials(lesson_id: uuid.UUID, payload: AttachMaterialsIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
+@router.post("/lesson-plans/{lesson_id}/materials", dependencies=[Depends(require_workspace_roles("owner"))])
+def attach_materials(lesson_id: uuid.UUID, payload: AttachMaterialsIn, user: CurrentUser, db: Session = Depends(get_db)):
     ws = get_or_create_default_workspace(db, user)
     lesson = get_lesson_plan(db, lesson_id, ws.id)
     if not lesson:
@@ -47,8 +47,8 @@ def attach_materials(lesson_id: uuid.UUID, payload: AttachMaterialsIn, db: Sessi
     attach(db, lesson, [it.model_dump() for it in payload.items])
     return {"ok": True, "attached_count": len(payload.items)}
 
-@router.delete("/lesson-plans/{lesson_id}/materials/{material_id}")
-def detach_material(lesson_id: uuid.UUID, material_id: uuid.UUID, db: Session = Depends(get_db), user=Depends(get_current_user)):
+@router.delete("/lesson-plans/{lesson_id}/materials/{material_id}", dependencies=[Depends(require_workspace_roles("owner"))])
+def detach_material(lesson_id: uuid.UUID, material_id: uuid.UUID, user: CurrentUser, db: Session = Depends(get_db)):
     ws = get_or_create_default_workspace(db, user)
     lesson = get_lesson_plan(db, lesson_id, ws.id)
     if not lesson:
